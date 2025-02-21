@@ -1,5 +1,5 @@
-import { useState } from "react";
-import "./App.css"
+import { useState, useEffect, useRef } from "react";
+import "./App.css";
 
 export default function App() {
   const [inputText, setInputText] = useState("");
@@ -14,8 +14,11 @@ export default function App() {
   const [translating, setTranslating] = useState(false);
   const [lastMessage, setLastMessage] = useState("");
   const [showSummary, setShowSummary] = useState(false);
+  const [buttonIndex, setButtonIndex] = useState(0);
+  const inputRef = useRef(null);
+  const buttonsRef = useRef([]);
 
-  // LANGUAGE DICTATOR FUNCTION
+  // Language Detection Function
   async function DetectLanguage(text) {
     try {
       if (!("ai" in self) || !("languageDetector" in self.ai)) throw new Error("Language detection API not available");
@@ -25,12 +28,12 @@ export default function App() {
       setConfidence(confidence);
       return { detectedLanguage, confidence };
     } catch (error) {
-      setMessages(prev => [...prev, { text: "Error detecting language", type: "error" }]);
+      setMessages((prev) => [...prev, { text: "Error detecting language", type: "error" }]);
       return { detectedLanguage: "unknown", confidence: 0 };
     }
   }
 
- // TRANSLATOR FUNCTION
+  // Translation Function
   async function TranslateText() {
     try {
       if (!lastMessage || !language || language === selectedLang) return;
@@ -41,15 +44,15 @@ export default function App() {
       });
       const result = await translator.translate(lastMessage);
       setTranslatedText(result);
-      setMessages((prev) => prev.map(msg => msg.text === lastMessage ? { ...msg, translation: result } : msg));
+      setMessages((prev) => prev.map((msg) => (msg.text === lastMessage ? { ...msg, translation: result } : msg)));
     } catch (error) {
-      setMessages(prev => [...prev, { text: "Error translating text", type: "error" }]);
+      setMessages((prev) => [...prev, { text: "Error translating text", type: "error" }]);
     } finally {
       setTranslating(false);
     }
   }
 
-// SUMMARIZER FUNCTION
+  // Summarization Function
   async function SummarizeText() {
     try {
       if (!lastMessage || lastMessage.length < 150 || language !== "en") return;
@@ -60,89 +63,121 @@ export default function App() {
       const result = await summarizer.summarize(lastMessage);
       setSummary(result);
     } catch (error) {
-      setMessages(prev => [...prev, { text: "Error summarizing text", type: "error" }]);
+      setMessages((prev) => [...prev, { text: "Error summarizing text", type: "error" }]);
     } finally {
       setSummarizing(false);
     }
   }
 
-  // FUNCTION FOR BUTTON CLICK TO SEND TEXT TO THE OUTPUT AREA
+  // Sending Message Function
   async function HandleSend() {
     if (!inputText.trim()) return;
     setLastMessage(inputText);
     setTranslatedText(null);
     setSummary(null);
     setShowSummary(false);
-    
+
     const { detectedLanguage, confidence } = await DetectLanguage(inputText);
-    
-    setMessages([...messages, { 
-      text: inputText, 
-      lang: detectedLanguage, 
-      confidence: confidence.toFixed(2) 
-    }]);
-    
+
+    setMessages([...messages, { text: inputText, lang: detectedLanguage, confidence: confidence.toFixed(2) }]);
     setInputText("");
   }
 
-    return (
-      <div className="chat__container">
-        <nav className="nav__bar">
-          <h1> AI Powered Text Prompter</h1>
-          <p className="paragraph">Say what is in your mind and have it translated and summarized!</p>
-        </nav>
-        <main className="main__container">
-          <section className="output__area">
-            {messages.map((msg, index) => (
-              <div key={index} className="chat__message">
-                <div className="text__container">
-                  <p className="text">{msg.text} <br/>
-                  {msg.lang && (
-                    <small className="dictateed__lang">
-                      Detected Language: {msg.lang} {msg.confidence ? `( ${msg.confidence})` : ""}
-                    </small>
-                  )}
-                  </p>
-                </div>
-                {msg.translation && <p className="translation"><span className="">TRANSLATION:</span> {msg.translation}</p>}
-                {msg.type === "error" && <p className="error">{msg.text}</p>}
-              </div>
-            ))}
-            <div className="summary__container">
-                {showSummary && <p className="summary"><span>SUMMARY:</span> {summary}</p>}
+  // Keyboard Navigation Handling
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (document.activeElement === inputRef.current) {
+        if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+          event.preventDefault();
+          inputRef.current.blur();
+          buttonsRef.current[buttonIndex]?.focus();
+        }
+        return;
+      }
+
+      if (event.key === "Enter") {
+        buttonsRef.current[buttonIndex]?.click();
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setButtonIndex((prev) => Math.max(prev - 1, 0));
+        buttonsRef.current[buttonIndex - 1]?.focus();
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setButtonIndex((prev) => Math.min(prev + 1, buttonsRef.current.length - 1));
+        buttonsRef.current[buttonIndex + 1]?.focus();
+      } else if (event.key === "Escape") {
+        inputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [buttonIndex]);
+
+  return (
+    <div className="chat__container">
+      <nav className="nav__bar">
+        <h1>AI Powered Text Processor</h1>
+        <p className="paragraph">Say what is in your mind and have it translate and summarize by ai!</p>
+      </nav>
+      <main className="main__container">
+        <section className="output__area">
+          {messages.map((msg, index) => (
+            <div key={index} className="chat__message">
+              <p className="text">
+                {msg.text} <br />
+                {msg.lang && (
+                  <small className="dictated__lang">
+                    Detected Language: {msg.lang} {msg.confidence ? `(${msg.confidence})` : ""}
+                  </small>
+                )}
+              </p>
+              {msg.translation && <p className="translation"><span>TRANSLATION:</span> {msg.translation}</p>}
+              {msg.type === "error" && <p className="error">{msg.text}</p>}
             </div>
-          </section>
-          <section className="input__button-container">
-                <div className="input__area">
-                  <textarea
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder="Type your message..."
-                    className="textarea"
-                  />
-                  <button id="send" onClick={HandleSend} disabled={loading}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white">
-                      <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>
-                  </svg>
-                  </button>
-              </div>
-              <div className="btn">
-              <select onChange={(e) => setSelectedLang(e.target.value)} value={selectedLang} className="select">
-                <option value="en">English</option>
-                <option value="pt">Portuguese</option>
-                <option value="es">Spanish</option>
-                <option value="ru">Russian</option>
-                <option value="tr">Turkish</option>
-                <option value="fr">French</option>
-              </select>
-              <button onClick={TranslateText} disabled={translating} className="translate__btn">{translating ? "Translating..." : "Translate"}</button>
-              {language === "en" && lastMessage.length > 150 && (
-                <button onClick={SummarizeText} disabled={summarizing} className="summary__btn">{summarizing ? "Summarizing..." : "Summarize"}</button>
-              )}
-              </div>
-          </section>
-         
-        </main>
+          ))}
+          <div className="summary__container">
+            {showSummary && <p className="summary"><span>SUMMARY:</span> {summary}</p>}
+          </div>
+        </section>
+        <section className="input__button-container">
+          <div className="input__area">
+            <textarea
+              ref={inputRef}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="Type your message..."
+              className="textarea"
+            />
+            <button id="send" onClick={HandleSend} ref={(el) => (buttonsRef.current[0] = el)}>
+              Send
+            </button>
+          </div>
+          <div className="btn">
+            <select
+              onChange={(e) => setSelectedLang(e.target.value)}
+              value={selectedLang}
+              className="select"
+              ref={(el) => (buttonsRef.current[1] = el)}
+            >
+              <option value="en">English</option>
+              <option value="pt">Portuguese</option>
+              <option value="es">Spanish</option>
+              <option value="ru">Russian</option>
+              <option value="tr">Turkish</option>
+              <option value="fr">French</option>
+            </select>
+            <button onClick={TranslateText} disabled={translating} className="translate__btn" ref={(el) => (buttonsRef.current[2] = el)}>
+              {translating ? "Translating..." : "Translate"}
+            </button>
+            {language === "en" && lastMessage.length > 150 && (
+              <button onClick={SummarizeText} disabled={summarizing} className="summary__btn" ref={(el) => (buttonsRef.current[3] = el)}>
+                {summarizing ? "Summarizing..." : "Summarize"}
+              </button>
+            )}
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
